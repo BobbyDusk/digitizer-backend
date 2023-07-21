@@ -1,4 +1,5 @@
 FROM python:3.11-slim
+SHELL ["/bin/bash", "-c"]
 
 COPY . /srv/digitizer
 WORKDIR /srv/digitizer
