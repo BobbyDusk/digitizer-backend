@@ -91,7 +91,13 @@ def process_image():
         date_string = datetime.today().date().isoformat()
         time_string = datetime.now().time().strftime("%H-%M-%S")
         image = Image.open(file)
-        processed_image = add_alpha_channel_based_on_lightness(image, mode=mode, threshold=threshold)
+        image_background_removed = remove_background(image)
+        image_background_removed.save("test.jpg")
+        return
+        image_background_removed_bytes = BytesIO(image_background_removed)
+        image_background_removed_bytes.seek(0)
+        image = Image.open(image_background_removed_bytes)
+        processed_image = add_alpha_channel_based_on_lightness(image_background_removed, mode=mode, threshold=threshold)
         image_bytes_io = BytesIO()
         processed_image.save(image_bytes_io, format="PNG")
         base64_image = base64.b64encode(image_bytes_io.getvalue()).decode('utf-8')
@@ -103,4 +109,4 @@ def process_image():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8080)
+    app.run(debug=True, port=8000)
