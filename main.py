@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from io import BytesIO
 import base64
+from rembg import remove
 
 app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": [r"localhost:(\d+)", r"(\w+)\.edgeofdusk\.com", "edgeofdusk.com"]}})
@@ -56,13 +57,15 @@ def calculate_average(r, g, b):
 def calculate_lightness(r, g, b):
     return int(((max(r, g, b) + min(r, g, b)) / 2) / 255 * 100) 
 
-def add_alpha_channel_based_on_lightness(file, mode="luminocity", threshold=80):
-    image = Image.open(file)
+def add_alpha_channel_based_on_lightness(image, mode="luminocity", threshold=80):
     rgba_image = image.convert("RGBA")
     pixel_data = list(rgba_image.getdata())
     updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, mode, threshold)) for r, g, b, a in pixel_data]
     rgba_image.putdata(updated_pixel_data)
     return rgba_image
+
+def remove_background(image):
+    image_removed_background = remove(image)
 
 @app.route("/test", methods=["GET"])
 def test():
@@ -87,7 +90,8 @@ def process_image():
         threshold = int(request.values["threshold"])
         date_string = datetime.today().date().isoformat()
         time_string = datetime.now().time().strftime("%H-%M-%S")
-        processed_image = add_alpha_channel_based_on_lightness(file, mode=mode, threshold=threshold)
+        image = Image.open(file)
+        processed_image = add_alpha_channel_based_on_lightness(image, mode=mode, threshold=threshold)
         image_bytes_io = BytesIO()
         processed_image.save(image_bytes_io, format="PNG")
         base64_image = base64.b64encode(image_bytes_io.getvalue()).decode('utf-8')
