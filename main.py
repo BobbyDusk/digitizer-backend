@@ -10,7 +10,7 @@ import base64
 
 app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": [r"localhost:(\d+)", r"(\w+)\.edgeofdusk\.com", "edgeofdusk.com"]}})
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
 def get_file_name_without_extension(file_path):
     base_name = os.path.basename(file_path)
