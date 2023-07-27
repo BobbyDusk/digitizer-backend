@@ -70,6 +70,7 @@ def test():
 
 @app.route("/upload", methods=["POST"])
 def process_image():
+    base64_image = None
     if "file" not in request.files:
         message = "No file uploaded"
 
