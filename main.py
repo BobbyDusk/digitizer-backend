@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from io import BytesIO
 import base64
-from rembg import remove
+from rembg import new_session, remove
 
 app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": [r"localhost:(\d+)", r"(\w+)\.edgeofdusk\.com", "edgeofdusk.com"]}})
@@ -21,8 +21,13 @@ def get_file_name_without_extension(file_path):
 def get_parent_directory(file_path):
     return os.path.dirname(file_path)
 
-def calculate_transparency(r, g, b, mode, threshold):
+def calculate_transparency(r, g, b, a, mode, threshold):
     # value between 0 and 255
+    if (a == 0):
+        return a
+    # between 0 and 1
+    max_transparency = 255
+    scaled_a = a / max_transparency
 
     match mode:
         case "lightness":
@@ -42,7 +47,7 @@ def calculate_transparency(r, g, b, mode, threshold):
     else:
         L_scaled = (L - threshold) * (max_L / (max_L - threshold))
         L_scaled = max(0, L_scaled)
-    return int(255 * (max_L - L_scaled) / max_L)
+    return int(scaled_a * (max_transparency * (max_L - L_scaled) / max_L))
 
 def calculate_luminocity(r, g, b):
     # value between 0 and 100, 100 is max luminocity 0 is min luminocity
@@ -60,51 +65,53 @@ def calculate_lightness(r, g, b):
 def add_alpha_channel_based_on_lightness(image, mode="luminocity", threshold=80):
     rgba_image = image.convert("RGBA")
     pixel_data = list(rgba_image.getdata())
-    updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, mode, threshold)) for r, g, b, a in pixel_data]
+    updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, a, mode, threshold)) for r, g, b, a in pixel_data]
     rgba_image.putdata(updated_pixel_data)
     return rgba_image
-
-def remove_background(image):
-    image_removed_background = remove(image)
 
 @app.route("/test", methods=["GET"])
 def test():
     return "test"
 
+def check_file_uploaded(request):
+    return "file" in request.files and request.files["file"] != ""
+
+def check_required_keys_present(request, required_keys):
+    for key in required_keys:
+        if key not in request.values:
+            return False
+    return True
+
 @app.route("/upload", methods=["POST"])
 def process_image():
-    base64_image = None
-    if "file" not in request.files:
-        message = "No file uploaded"
+    if not check_file_uploaded(request):
+        return jsonify({"message": "No file uploaded"})
+
+    required_keys = ["filterWhiteEnabled", "filterWhiteMode", "filterWhiteThreshold", "removeBackgroundEnabled", "removeBackgroundMode"]
+    if not check_required_keys_present(request, required_keys):
+        return jsonify({"message": f"One or more of the following info not included: {','.join(required_keys)}"})
 
     file = request.files["file"]
+    filename = file.filename
+    content_type = file.content_type
 
-    if file.filename == "":
-        message = "No file uploaded"
+    image = Image.open(file)
+    if request.values["removeBackgroundEnabled"] == "true":
+        model = request.values["removeBackgroundMode"]
+        session = new_session(model)
+        image = remove(image, session=session)
 
-    if file:
-        filename = file.filename
-        base_filename, file_extension = os.path.splitext(filename)
-        content_type = file.content_type
-        mode = request.values["mode"]
-        threshold = int(request.values["threshold"])
-        date_string = datetime.today().date().isoformat()
-        time_string = datetime.now().time().strftime("%H-%M-%S")
-        image = Image.open(file)
-        image_background_removed = remove_background(image)
-        image_background_removed.save("test.jpg")
-        return
-        image_background_removed_bytes = BytesIO(image_background_removed)
-        image_background_removed_bytes.seek(0)
-        image = Image.open(image_background_removed_bytes)
-        processed_image = add_alpha_channel_based_on_lightness(image_background_removed, mode=mode, threshold=threshold)
-        image_bytes_io = BytesIO()
-        processed_image.save(image_bytes_io, format="PNG")
-        base64_image = base64.b64encode(image_bytes_io.getvalue()).decode('utf-8')
-        base64_image = f"data:image/png;base64,{base64_image}"
-        message = f"File {filename} uploaded succesfully. Content type: {content_type}, mode: {mode}, threshold: {threshold}"
+    if request.values["filterWhiteEnabled"] == "true":
+        mode = request.values["filterWhiteMode"]
+        threshold = int(request.values["filterWhiteThreshold"])
+        image = add_alpha_channel_based_on_lightness(image, mode=mode, threshold=threshold)
+
+    image_bytes_io = BytesIO()
+    image.save(image_bytes_io, format="PNG")
+    base64_image = base64.b64encode(image_bytes_io.getvalue()).decode('utf-8')
+    base64_image = f"data:image/png;base64,{base64_image}"
+    message = f"File {filename} processed succesfully."
     data = {"message": message, "image": base64_image}
-    print(message)
     return jsonify(data)
 
 
