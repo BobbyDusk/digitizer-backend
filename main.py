@@ -84,6 +84,9 @@ def check_required_keys_present(request, required_keys):
 
 @app.route("/upload", methods=["POST"])
 def process_image():
+    if request.json:
+        content = request.json
+        print(content)
     if not check_file_uploaded(request):
         return jsonify({"message": "No file uploaded"})
 
@@ -99,6 +102,7 @@ def process_image():
     if request.values["removeBackgroundEnabled"] == "true":
         model = request.values["removeBackgroundMode"]
         session = new_session(model)
+        print(request.values["point"])
         image = remove(image, session=session)
 
     if request.values["filterWhiteEnabled"] == "true":
