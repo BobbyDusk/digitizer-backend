@@ -73,51 +73,43 @@ def add_alpha_channel_based_on_lightness(image, mode="luminocity", threshold=80)
 def test():
     return "test"
 
-def check_file_uploaded(request):
-    return "file" in request.files and request.files["file"] != ""
 
-def check_required_keys_present(request, required_keys):
+def check_required_keys_present(data, required_keys):
     for key in required_keys:
-        if key not in request.values:
+        if key not in data:
             return False
     return True
 
 @app.route("/upload", methods=["POST"])
 def process_image():
     if request.json:
-        content = request.json
-        print(content)
-    if not check_file_uploaded(request):
-        return jsonify({"message": "No file uploaded"})
+        data = request.json
 
-    required_keys = ["filterWhiteEnabled", "filterWhiteMode", "filterWhiteThreshold", "removeBackgroundEnabled", "removeBackgroundMode"]
-    if not check_required_keys_present(request, required_keys):
-        return jsonify({"message": f"One or more of the following info not included: {','.join(required_keys)}"})
+    required_keys = ["image", "filterWhiteEnabled", "filterWhiteMode", "filterWhiteThreshold", "removeBackgroundEnabled", "removeBackgroundMode"]
+    if not check_required_keys_present(data, required_keys):
+        return jsonify({"message": f"One or more of the following info not included: {', '.join(required_keys)}"})
 
-    file = request.files["file"]
-    filename = file.filename
-    content_type = file.content_type
-
-    image = Image.open(file)
-    if request.values["removeBackgroundEnabled"] == "true":
-        model = request.values["removeBackgroundMode"]
-        session = new_session(model)
-        print(request.values["point"])
+    with open("test.txt", "w") as text_file:
+        text_file.write(data["image"])
+    image_front, image_string = data["image"].split(",")
+    imageRaw = BytesIO(base64.b64decode(image_string))
+    image = Image.open(imageRaw, formats=["JPEG", "PNG"])
+    if data["removeBackgroundEnabled"]:
+        session = new_session(data["removeBackgroundMode"])
+        if ("point" in data):
+            print(data["point"])
         image = remove(image, session=session)
 
-    if request.values["filterWhiteEnabled"] == "true":
-        mode = request.values["filterWhiteMode"]
-        threshold = int(request.values["filterWhiteThreshold"])
-        image = add_alpha_channel_based_on_lightness(image, mode=mode, threshold=threshold)
+    if data["filterWhiteEnabled"]:
+        image = add_alpha_channel_based_on_lightness(image, mode=data["filterWhiteMode"], threshold=data["filterWhiteThreshold"])
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
     base64_image = base64.b64encode(image_bytes_io.getvalue()).decode('utf-8')
     base64_image = f"data:image/png;base64,{base64_image}"
-    message = f"File {filename} processed succesfully."
+    message = f"image processed succesfully."
     data = {"message": message, "image": base64_image}
     return jsonify(data)
-
 
 if __name__ == "__main__":
     app.run(debug=True, port=8000)
