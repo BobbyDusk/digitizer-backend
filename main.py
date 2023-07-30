@@ -8,20 +8,21 @@ from pathlib import Path
 from io import BytesIO
 import base64
 from rembg import new_session, remove
+import numpy as np
 
 app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": [r"localhost:(\d+)", r"(\w+)\.edgeofdusk\.com", "edgeofdusk.com"]}})
 CORS(app)
 
-def get_file_name_without_extension(file_path):
+def get_file_name_without_extension(file_path:str) -> str:
     base_name = os.path.basename(file_path)
     file_name, file_extension = os.path.splitext(base_name)
     return file_name
 
-def get_parent_directory(file_path):
+def get_parent_directory(file_path:str) -> str:
     return os.path.dirname(file_path)
 
-def calculate_transparency(r, g, b, a, mode, threshold):
+def calculate_transparency(r:int, g:int, b:int, a:int, mode:str, threshold:int) -> int:
     # value between 0 and 255
     if (a == 0):
         return a
@@ -49,20 +50,20 @@ def calculate_transparency(r, g, b, a, mode, threshold):
         L_scaled = max(0, L_scaled)
     return int(scaled_a * (max_transparency * (max_L - L_scaled) / max_L))
 
-def calculate_luminocity(r, g, b):
+def calculate_luminocity(r:int, g:int, b:int) -> int:
     # value between 0 and 100, 100 is max luminocity 0 is min luminocity
     # Many possible calculations. This is a simple one. However, see Myndex's answer
     # for a more accurate and complete calculation
     # https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color/37624009#37624009
     return int( (0.299 * r + 0.587 * g + 0.114 * b) / 255 * 100)
 
-def calculate_average(r, g, b):
+def calculate_average(r:int, g:int, b:int) -> int:
     return int(((r + g + b) / 3) / 255 * 100 )
 
-def calculate_lightness(r, g, b):
+def calculate_lightness(r:int, g:int, b:int) -> int:
     return int(((max(r, g, b) + min(r, g, b)) / 2) / 255 * 100) 
 
-def add_alpha_channel_based_on_lightness(image, mode="luminocity", threshold=80):
+def add_alpha_channel_based_on_lightness(image:Image, mode:str = "luminocity", threshold:int = 80) -> Image:
     rgba_image = image.convert("RGBA")
     pixel_data = list(rgba_image.getdata())
     updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, a, mode, threshold)) for r, g, b, a in pixel_data]
@@ -70,11 +71,11 @@ def add_alpha_channel_based_on_lightness(image, mode="luminocity", threshold=80)
     return rgba_image
 
 @app.route("/test", methods=["GET"])
-def test():
+def test() -> str:
     return "test"
 
 
-def check_required_keys_present(data, required_keys):
+def check_required_keys_present(data:dict, required_keys:list[str]) -> bool:
     for key in required_keys:
         if key not in data:
             return False
@@ -96,9 +97,10 @@ def process_image():
     image = Image.open(imageRaw, formats=["JPEG", "PNG"])
     if data["removeBackgroundEnabled"]:
         session = new_session(data["removeBackgroundMode"])
-        if ("point" in data):
-            print(data["point"])
-        image = remove(image, session=session)
+        print(data["points"])
+        input_points = np.array(data["points"])
+        input_labels = np.array([1 for point in data["points"]])
+        image = remove(image, session=session, input_points=input_points, input_labels=input_labels)
 
     if data["filterWhiteEnabled"]:
         image = add_alpha_channel_based_on_lightness(image, mode=data["filterWhiteMode"], threshold=data["filterWhiteThreshold"])
