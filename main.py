@@ -22,7 +22,7 @@ def get_file_name_without_extension(file_path:str) -> str:
 def get_parent_directory(file_path:str) -> str:
     return os.path.dirname(file_path)
 
-def calculate_transparency(r:int, g:int, b:int, a:int, mode:str, threshold:int) -> int:
+def calculate_transparency(r:int, g:int, b:int, a:int, model:str, threshold:int) -> int:
     # value between 0 and 255
     if (a == 0):
         return a
@@ -30,7 +30,7 @@ def calculate_transparency(r:int, g:int, b:int, a:int, mode:str, threshold:int) 
     max_transparency = 255
     scaled_a = a / max_transparency
 
-    match mode:
+    match model:
         case "lightness":
             L = calculate_lightness(r, g, b)
         case "average":
@@ -63,10 +63,10 @@ def calculate_average(r:int, g:int, b:int) -> int:
 def calculate_lightness(r:int, g:int, b:int) -> int:
     return int(((max(r, g, b) + min(r, g, b)) / 2) / 255 * 100) 
 
-def add_alpha_channel_based_on_lightness(image:Image, mode:str = "luminocity", threshold:int = 80) -> Image:
+def add_alpha_channel_based_on_lightness(image:Image, model:str = "luminocity", threshold:int = 80) -> Image:
     rgba_image = image.convert("RGBA")
     pixel_data = list(rgba_image.getdata())
-    updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, a, mode, threshold)) for r, g, b, a in pixel_data]
+    updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, a, model, threshold)) for r, g, b, a in pixel_data]
     rgba_image.putdata(updated_pixel_data)
     return rgba_image
 
@@ -86,24 +86,29 @@ def process_image():
     if request.json:
         data = request.json
 
-    required_keys = ["image", "filterWhiteEnabled", "filterWhiteMode", "filterWhiteThreshold", "removeBackgroundEnabled", "removeBackgroundMode"]
+    # TODO: also add recursive required key check
+    required_keys = [
+        "image", 
+        "filterWhite", 
+        "removeBackground", 
+    ]
     if not check_required_keys_present(data, required_keys):
         return jsonify({"message": f"One or more of the following info not included: {', '.join(required_keys)}"})
 
-    with open("test.txt", "w") as text_file:
-        text_file.write(data["image"])
     image_front, image_string = data["image"].split(",")
     imageRaw = BytesIO(base64.b64decode(image_string))
     image = Image.open(imageRaw, formats=["JPEG", "PNG"])
-    if data["removeBackgroundEnabled"]:
-        session = new_session(data["removeBackgroundMode"])
-        print(data["points"])
-        input_points = np.array(data["points"])
-        input_labels = np.array([1 for point in data["points"]])
-        image = remove(image, session=session, input_points=input_points, input_labels=input_labels)
 
-    if data["filterWhiteEnabled"]:
-        image = add_alpha_channel_based_on_lightness(image, mode=data["filterWhiteMode"], threshold=data["filterWhiteThreshold"])
+    removeBackgroundParams = data["removeBackground"]
+    if removeBackgroundParams["enabled"]:
+        session = new_session(removeBackgroundParams["model"])
+        input_points = np.array(removeBackgroundParams["points"])
+        input_labels = np.array([1 for point in removeBackgroundParams["points"]])
+        image = remove(image, session=session, input_points=input_points, input_labels=input_labels, post_process_mask=removeBackgroundParams["postProcess"])
+
+    filterWhiteParams = data["filterWhite"]
+    if filterWhiteParams["enabled"]:
+        image = add_alpha_channel_based_on_lightness(image, model=filterWhiteParams["model"], threshold=filterWhiteParams["threshold"])
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
