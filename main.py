@@ -9,10 +9,16 @@ from io import BytesIO
 import base64
 from rembg import new_session, remove
 import numpy as np
+import logging
 
 app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": [r"localhost:(\d+)", r"(\w+)\.edgeofdusk\.com", "edgeofdusk.com"]}})
 CORS(app)
+
+if __name__ != '__main__':
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
 
 def get_file_name_without_extension(file_path:str) -> str:
     base_name = os.path.basename(file_path)
