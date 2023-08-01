@@ -104,6 +104,10 @@ def process_image():
     image_front, image_string = data["image"].split(",")
     imageRaw = BytesIO(base64.b64decode(image_string))
     image = Image.open(imageRaw, formats=["JPEG", "PNG"])
+    
+    # required in order to limit the required processing power
+    MAX_SIZE = 2000
+    image.thumbnail([MAX_SIZE, MAX_SIZE], Image.LANCZOS)
 
     removeBackgroundParams = data["removeBackground"]
     if removeBackgroundParams["enabled"]:
