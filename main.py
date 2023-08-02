@@ -28,13 +28,10 @@ def get_file_name_without_extension(file_path:str) -> str:
 def get_parent_directory(file_path:str) -> str:
     return os.path.dirname(file_path)
 
-def calculate_transparency(r:int, g:int, b:int, a:int, model:str, threshold:int) -> int:
-    # value between 0 and 255
+def calculate_transparency(r:int, g:int, b:int, a:int, model:str, threshold:int, max:int) -> int:
+    # If original opacity is 0, leave it
     if (a == 0):
         return a
-    # between 0 and 1
-    max_transparency = 255
-    scaled_a = a / max_transparency
 
     match model:
         case "lightness":
@@ -46,33 +43,38 @@ def calculate_transparency(r:int, g:int, b:int, a:int, model:str, threshold:int)
         case _:
             L = calculate_luminocity(r, g, b)
 
-    # values above the cutoff are left at 100% opacity
-    max_L = 100
+    #values lighter than max have 0 opacity
+    if (L >= max):
+        return 0
 
-    if (threshold == max_L):
-        L_scaled = 0
-    else:
-        L_scaled = (L - threshold) * (max_L / (max_L - threshold))
-        L_scaled = max(0, L_scaled)
-    return int(scaled_a * (max_transparency * (max_L - L_scaled) / max_L))
+    # values darker than threshold are left at original opacity
+    if (L <= threshold):
+        return a
+
+    # values with lightness between threshold and max are scaled
+    range = max - threshold
+    relative_L = L - threshold
+    scaled_relative_L = relative_L / range # between 0 and 1
+    scaled_L = scaled_relative_L * 255
+    scaled_a = a / 255 # between 0 and 1
+    return int(scaled_a * (255 - scaled_L))
 
 def calculate_luminocity(r:int, g:int, b:int) -> int:
-    # value between 0 and 100, 100 is max luminocity 0 is min luminocity
     # Many possible calculations. This is a simple one. However, see Myndex's answer
     # for a more accurate and complete calculation
     # https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color/37624009#37624009
-    return int( (0.299 * r + 0.587 * g + 0.114 * b) / 255 * 100)
+    return int(0.299 * r + 0.587 * g + 0.114 * b)
 
 def calculate_average(r:int, g:int, b:int) -> int:
-    return int(((r + g + b) / 3) / 255 * 100 )
+    return int((r + g + b) / 3)
 
 def calculate_lightness(r:int, g:int, b:int) -> int:
-    return int(((max(r, g, b) + min(r, g, b)) / 2) / 255 * 100) 
+    return int((max(r, g, b) + min(r, g, b)) / 2) 
 
-def add_alpha_channel_based_on_lightness(image:Image, model:str = "luminocity", threshold:int = 80) -> Image:
+def add_alpha_channel_based_on_lightness(image:Image, model:str = "luminocity", threshold:int = 230, max:int = 255) -> Image:
     rgba_image = image.convert("RGBA")
     pixel_data = list(rgba_image.getdata())
-    updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, a, model, threshold)) for r, g, b, a in pixel_data]
+    updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, a, model, threshold, max)) for r, g, b, a in pixel_data]
     rgba_image.putdata(updated_pixel_data)
     return rgba_image
 
@@ -118,7 +120,7 @@ def process_image():
 
     filterWhiteParams = data["filterWhite"]
     if filterWhiteParams["enabled"]:
-        image = add_alpha_channel_based_on_lightness(image, model=filterWhiteParams["model"], threshold=filterWhiteParams["threshold"])
+        image = add_alpha_channel_based_on_lightness(image, model=filterWhiteParams["model"], threshold=filterWhiteParams["threshold"], max=filterWhiteParams["max"])
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
