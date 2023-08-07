@@ -106,21 +106,48 @@ def process_image():
     image_front, image_string = data["image"].split(",")
     imageRaw = BytesIO(base64.b64decode(image_string))
     image = Image.open(imageRaw, formats=["JPEG", "PNG"])
-    
-    # required in order to limit the required processing power
+
+    cropParams = data["crop"]
+    if (cropParams["enabled"]):
+        cropBox = (cropParams["left"], cropParams["top"], cropParams["left"] + cropParams["width"], cropParams["top"] + cropParams["height"])
+        image = image.crop(cropBox)
+   
+    # necessary in order to limit the required processing power
     MAX_SIZE = 2000
-    image.thumbnail([MAX_SIZE, MAX_SIZE], Image.LANCZOS)
+    if (image.height > MAX_SIZE or image.width > MAX_SIZE):
+        image.thumbnail([MAX_SIZE, MAX_SIZE], Image.LANCZOS)
 
     removeBackgroundParams = data["removeBackground"]
-    if removeBackgroundParams["enabled"]:
+    if (removeBackgroundParams["enabled"]):
         session = new_session(removeBackgroundParams["model"])
         input_points = np.array(removeBackgroundParams["points"])
         input_labels = np.array([1 for point in removeBackgroundParams["points"]])
         image = remove(image, session=session, input_points=input_points, input_labels=input_labels, post_process_mask=removeBackgroundParams["postProcess"])
 
     filterWhiteParams = data["filterWhite"]
-    if filterWhiteParams["enabled"]:
+    if (filterWhiteParams["enabled"]):
         image = add_alpha_channel_based_on_lightness(image, model=filterWhiteParams["model"], threshold=filterWhiteParams["threshold"], max=filterWhiteParams["max"])
+
+    if (cropParams["enabled"] and cropParams["autoEnabled"] and image.mode == "RGBA"):
+        top = image.height
+        left = image.width
+        bottom = 0
+        right = 0
+        for y in range(image.height):
+            for x in range(image.width):
+                r, g, b, a = image.getpixel((x, y))
+                if (a > cropParams["threshold"]):
+                    top = min(top, y)
+                    left = min(left, x)
+                    bottom = max(bottom, y)
+                    right = max(right, x)
+        if (bottom != 0): # non-transparent pixel found
+            borderWidth = 2
+            image = image.crop((left - borderWidth, top - borderWidth, right + borderWidth, bottom + borderWidth))
+
+    resizeParams = data["resize"]
+    if (resizeParams["enabled"]):
+        image = image.resize((resizeParams["width"], resizeParams["height"]))
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
