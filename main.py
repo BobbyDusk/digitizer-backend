@@ -147,7 +147,7 @@ def process_image():
 
     resizeParams = data["resize"]
     if (resizeParams["enabled"]):
-        image = image.resize((resizeParams["width"], resizeParams["height"]))
+        image = image.thumbnail((resizeParams["width"], resizeParams["height"]))
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
