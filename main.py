@@ -115,7 +115,7 @@ def process_image():
     # necessary in order to limit the required processing power
     MAX_SIZE = 2000
     if (image.height > MAX_SIZE or image.width > MAX_SIZE):
-        image.thumbnail([MAX_SIZE, MAX_SIZE], Image.LANCZOS)
+        image.thumbnail([MAX_SIZE, MAX_SIZE])
 
     removeBackgroundParams = data["removeBackground"]
     if (removeBackgroundParams["enabled"]):
