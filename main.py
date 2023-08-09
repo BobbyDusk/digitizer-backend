@@ -78,6 +78,28 @@ def add_alpha_channel_based_on_lightness(image:Image, model:str = "luminocity", 
     rgba_image.putdata(updated_pixel_data)
     return rgba_image
 
+def filter_white_in_edge(image:Image) -> Image:
+    for y in range(image.height):
+        for x in range(image.width):
+            pixel = image.getpixel((x, y))
+            if (pixel[3] > 10):
+                found = False
+                for y_offset in range(-1, 2, 1):
+                    if (found):
+                        break
+                    for x_offset in range(-1, 2, 1):
+                        comparisonY = y + y_offset
+                        comparisonX = x + x_offset
+                        if (comparisonY >= 0 and comparisonY < image.height and comparisonX >= 0 and comparisonX < image.width):
+                            comparison_pixel = image.getpixel((comparisonX, comparisonY))
+                            if (comparison_pixel[3] <= 10):
+                                found = True
+                                green = (0, 255, 0, 255)
+                                image.putpixel((x, y), green)
+                                break
+    return image
+
+
 @app.route("/test", methods=["GET"])
 def test() -> str:
     return "test"
@@ -123,6 +145,9 @@ def process_image():
         input_points = np.array(removeBackgroundParams["points"])
         input_labels = np.array([1 for point in removeBackgroundParams["points"]])
         image = remove(image, session=session, input_points=input_points, input_labels=input_labels, post_process_mask=removeBackgroundParams["postProcess"])
+
+        if (removeBackgroundParams["edgeWhiteFilter"]):
+            image = filter_white_in_edge(image)
 
     filterWhiteParams = data["filterWhite"]
     if (filterWhiteParams["enabled"]):
