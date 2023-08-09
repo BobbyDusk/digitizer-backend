@@ -78,25 +78,33 @@ def add_alpha_channel_based_on_lightness(image:Image, model:str = "luminocity", 
     rgba_image.putdata(updated_pixel_data)
     return rgba_image
 
-def filter_white_in_edge(image:Image) -> Image:
+def filter_white_in_edge(image:Image, border_width:int = 1) -> Image:
+    # TODO: improve computation with larger border_width
+    pixel_positions_to_change:list(tuple(int, int)) = []
     for y in range(image.height):
         for x in range(image.width):
             pixel = image.getpixel((x, y))
             if (pixel[3] > 10):
                 found = False
-                for y_offset in range(-1, 2, 1):
+                for y_offset in range(-1 * border_width, border_width + 1, 1):
                     if (found):
                         break
-                    for x_offset in range(-1, 2, 1):
+                    for x_offset in range(-1 * border_width, border_width + 1, 1):
                         comparisonY = y + y_offset
                         comparisonX = x + x_offset
                         if (comparisonY >= 0 and comparisonY < image.height and comparisonX >= 0 and comparisonX < image.width):
                             comparison_pixel = image.getpixel((comparisonX, comparisonY))
                             if (comparison_pixel[3] <= 10):
+                                pixel_positions_to_change.append((x, y))
                                 found = True
-                                green = (0, 255, 0, 255)
-                                image.putpixel((x, y), green)
                                 break
+
+    for pos in pixel_positions_to_change:
+        pixel = image.getpixel((pos[0], pos[1]))
+        new_pixel = (pixel[0], pixel[1], pixel[2], calculate_transparency(pixel[0], pixel[1], pixel[2], pixel[3], model = "luminocity", threshold = 230, max = 255))
+        new_pixel = (255, 0, 0, 255)
+        image.putpixel((pos[0], pos[1]), new_pixel)
+
     return image
 
 
@@ -147,7 +155,7 @@ def process_image():
         image = remove(image, session=session, input_points=input_points, input_labels=input_labels, post_process_mask=removeBackgroundParams["postProcess"])
 
         if (removeBackgroundParams["edgeWhiteFilter"]):
-            image = filter_white_in_edge(image)
+            image = filter_white_in_edge(image, border_width=2)
 
     filterWhiteParams = data["filterWhite"]
     if (filterWhiteParams["enabled"]):
