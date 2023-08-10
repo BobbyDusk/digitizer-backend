@@ -78,7 +78,7 @@ def add_alpha_channel_based_on_lightness(image:Image, model:str = "luminocity", 
     rgba_image.putdata(updated_pixel_data)
     return rgba_image
 
-def filter_white_in_edge(image:Image, border_width:int = 1) -> Image:
+def filter_white_in_edge(image:Image, border_width:int = 2, threshold:int = 150, max:int = 240) -> Image:
     # TODO: improve computation with larger border_width
     pixel_positions_to_change:list(tuple(int, int)) = []
     for y in range(image.height):
@@ -101,8 +101,7 @@ def filter_white_in_edge(image:Image, border_width:int = 1) -> Image:
 
     for pos in pixel_positions_to_change:
         pixel = image.getpixel((pos[0], pos[1]))
-        new_pixel = (pixel[0], pixel[1], pixel[2], calculate_transparency(pixel[0], pixel[1], pixel[2], pixel[3], model = "luminocity", threshold = 230, max = 255))
-        new_pixel = (255, 0, 0, 255)
+        new_pixel = (pixel[0], pixel[1], pixel[2], calculate_transparency(pixel[0], pixel[1], pixel[2], pixel[3], model = "luminocity", threshold = threshold, max = max))
         image.putpixel((pos[0], pos[1]), new_pixel)
 
     return image
@@ -155,7 +154,7 @@ def process_image():
         image = remove(image, session=session, input_points=input_points, input_labels=input_labels, post_process_mask=removeBackgroundParams["postProcess"])
 
         if (removeBackgroundParams["edgeWhiteFilter"]):
-            image = filter_white_in_edge(image, border_width=2)
+            image = filter_white_in_edge(image, border_width=removeBackgroundParams["edgeWhiteFilterWidth"], threshold=removeBackgroundParams["edgeWhiteFilterThreshold"], max=removeBackgroundParams["edgeWhiteFilterMax"])
 
     filterWhiteParams = data["filterWhite"]
     if (filterWhiteParams["enabled"]):
@@ -180,7 +179,7 @@ def process_image():
 
     resizeParams = data["resize"]
     if (resizeParams["enabled"]):
-        image = image.thumbnail((resizeParams["width"], resizeParams["height"]))
+        image.thumbnail((resizeParams["width"], resizeParams["height"]))
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
