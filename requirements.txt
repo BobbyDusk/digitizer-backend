@@ -3,4 +3,5 @@ flask-cors == 4.0.0
 gunicorn == 21.2.0
 pillow == 10.0.0
 rembg == 2.0.50
+opencv == 4.8.0
 

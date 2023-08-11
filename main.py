@@ -1,3 +1,8 @@
+# TODO: replace luminicity calculation by conversion to "L"
+# TODO: getbbox instead of own custon function
+# TODO: replace contour detection with opencv contour detection or pillow filter contour
+# TODO: automatically detect different objects by first making backkground black and then using opencv.contours()
+
 from PIL import Image
 import os
 import math
