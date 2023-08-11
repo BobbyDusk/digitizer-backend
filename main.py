@@ -15,6 +15,8 @@ import base64
 from rembg import new_session, remove
 import numpy as np
 import logging
+import numpy as np
+import cv2 as cv
 
 app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": [r"localhost:(\d+)", r"(\w+)\.edgeofdusk\.com", "edgeofdusk.com"]}})
@@ -33,11 +35,7 @@ def get_file_name_without_extension(file_path:str) -> str:
 def get_parent_directory(file_path:str) -> str:
     return os.path.dirname(file_path)
 
-def calculate_transparency(r:int, g:int, b:int, a:int, model:str, threshold:int, max:int) -> int:
-    # If original opacity is 0, leave it
-    if (a == 0):
-        return a
-
+def calculate_L(r, g, b, model:str):
     match model:
         case "lightness":
             L = calculate_lightness(r, g, b)
@@ -47,7 +45,25 @@ def calculate_transparency(r:int, g:int, b:int, a:int, model:str, threshold:int,
             L = calculate_luminocity(r, g, b)
         case _:
             L = calculate_luminocity(r, g, b)
+    return L
 
+def calculate_transparency(image:Image, x:int, y:int , model:str, threshold:int, max:int) -> int:
+    if image.mode == "RGB":
+        r, g, b = image.getpixel((x, y))
+        a = 255
+        L = calculate_L(r, g, b, model)
+    elif image.mode == "RGBA":
+        r, g, b, a = image.getpixel((x, y))
+        L = calculate_L(r, g, b, model)
+    elif image.mode == "L":
+        a = 255
+        L = image.getpixel((x, y))
+    else:
+        raise Exception("Provided image does not have supported mode.")
+
+    # If original opacity is 0, leave it
+    if (a == 0):
+        return a
     #values lighter than max have 0 opacity
     if (L >= max):
         return 0
@@ -76,12 +92,22 @@ def calculate_average(r:int, g:int, b:int) -> int:
 def calculate_lightness(r:int, g:int, b:int) -> int:
     return int((max(r, g, b) + min(r, g, b)) / 2) 
 
-def add_alpha_channel_based_on_lightness(image:Image, model:str = "luminocity", threshold:int = 230, max:int = 255) -> Image:
-    rgba_image = image.convert("RGBA")
-    pixel_data = list(rgba_image.getdata())
-    updated_pixel_data = [(r, g, b, calculate_transparency(r, g, b, a, model, threshold, max)) for r, g, b, a in pixel_data]
-    rgba_image.putdata(updated_pixel_data)
-    return rgba_image
+def add_alpha_channel_based_on_lightness(image:Image, model:str = "pillow", threshold:int = 230, max:int = 255) -> Image:
+    result = Image.new('RGBA', (image.width, image.height))
+    
+    if (model == "pillow"):
+        L_image = image.convert("LA")
+        L_image.save("test.png")
+
+    for y in range(image.height):
+        for x in range(image.width):
+            pixel = image.getpixel((x, y))
+            if (model == "pillow"):
+                a = calculate_transparency(L_image, x, y, model, threshold, max)
+            else:
+                a = calculate_transparency(image, x, y, model, threshold, max)
+            result.putpixel((x, y), (pixel[0], pixel[1], pixel[2], a))
+    return result
 
 def filter_white_in_edge(image:Image, border_width:int = 2, threshold:int = 150, max:int = 240) -> Image:
     # TODO: improve computation with larger border_width
@@ -104,9 +130,11 @@ def filter_white_in_edge(image:Image, border_width:int = 2, threshold:int = 150,
                                 found = True
                                 break
 
+    L_image = image.convert("L")
     for pos in pixel_positions_to_change:
         pixel = image.getpixel((pos[0], pos[1]))
-        new_pixel = (pixel[0], pixel[1], pixel[2], calculate_transparency(pixel[0], pixel[1], pixel[2], pixel[3], model = "luminocity", threshold = threshold, max = max))
+        a = calculate_transparency(L_image, pos[0], pos[1], "pillow", threshold, max)
+        new_pixel = (pixel[0], pixel[1], pixel[2], a)
         image.putpixel((pos[0], pos[1]), new_pixel)
 
     return image
