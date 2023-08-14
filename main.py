@@ -1,4 +1,3 @@
-# TODO: replace luminicity calculation by conversion to "L"
 # TODO: getbbox instead of own custon function
 # TODO: replace contour detection with opencv contour detection or pillow filter contour
 # TODO: automatically detect different objects by first making backkground black and then using opencv.contours()
@@ -196,21 +195,23 @@ def process_image():
         image = add_alpha_channel_based_on_lightness(image, model=filterWhiteParams["model"], threshold=filterWhiteParams["threshold"], max=filterWhiteParams["max"])
 
     if (cropParams["enabled"] and cropParams["autoEnabled"] and image.mode == "RGBA"):
-        top = image.height
-        left = image.width
-        bottom = 0
-        right = 0
-        for y in range(image.height):
-            for x in range(image.width):
-                r, g, b, a = image.getpixel((x, y))
-                if (a > cropParams["threshold"]):
-                    top = min(top, y)
-                    left = min(left, x)
-                    bottom = max(bottom, y)
-                    right = max(right, x)
-        if (bottom != 0): # non-transparent pixel found
-            borderWidth = 2
-            image = image.crop((left - borderWidth, top - borderWidth, right + borderWidth, bottom + borderWidth))
+        image = image.crop(image.getbbox())
+        
+        # top = image.height
+        # left = image.width
+        # bottom = 0
+        # right = 0
+        # for y in range(image.height):
+        #     for x in range(image.width):
+        #         r, g, b, a = image.getpixel((x, y))
+        #         if (a > cropParams["threshold"]):
+        #             top = min(top, y)
+        #             left = min(left, x)
+        #             bottom = max(bottom, y)
+        #             right = max(right, x)
+        # if (bottom != 0): # non-transparent pixel found
+        #     borderWidth = 2
+        #     image = image.crop((left - borderWidth, top - borderWidth, right + borderWidth, bottom + borderWidth))
 
     resizeParams = data["resize"]
     if (resizeParams["enabled"]):
