@@ -1,5 +1,8 @@
-# TODO: getbbox instead of own custon function
 # TODO: replace contour detection with opencv contour detection or pillow filter contour
+# to get the alpha channel: 
+# image = image.getchannel("A") -> returns L
+# to crush the alpha channel
+# image.convert("1", dither = Image.Dither.NONE)
 # TODO: automatically detect different objects by first making backkground black and then using opencv.contours()
 
 from PIL import Image
