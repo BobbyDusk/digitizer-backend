@@ -29,6 +29,31 @@ if __name__ != '__main__':
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
 
+def convert_pillow_to_openCV(pillow_image:Image) -> np.array:
+    if pillow_image.mode == "RGB":
+        cv_image = np.array(pillow_image)
+        return cv.cvtColor(cv_image, cv.COLOR_RGB2BGR)
+    elif pillow_image.mode == "RGBA":
+        cv_image = np.array(pillow_image)
+        return cv.cvtColor(cv_image, cv.COLOR_RGBA2BGRA)
+    elif pillow_image.mode in ["L", "1"]:
+        return np.array(pillow_image)
+    else:
+        raise Exception("Image mode not supported.")
+
+def convert_openCV_to_pillow(cv_image:Image, mode) -> Image:
+    if mode == "RGB":
+        cv_image = cv.cvtColor(cv_image, cv.COLOR_BGR2RGB)
+        return Image.fromarray(cv_image)
+    elif mode == "RGBA":
+        cv_image = cv.cvtColor(cv_image, cv.COLOR_BGRA2RGBA)
+        return Image.fromarray(cv_image)
+    elif mode in ["L", "1"]:
+        return Image.fromarray(cv_image)
+    else:
+        raise Exception("Image mode not supported.")
+
+
 def get_file_name_without_extension(file_path:str) -> str:
     base_name = os.path.basename(file_path)
     file_name, file_extension = os.path.splitext(base_name)
@@ -203,6 +228,9 @@ def process_image():
     resizeParams = data["resize"]
     if (resizeParams["enabled"]):
         image.thumbnail((resizeParams["width"], resizeParams["height"]))
+
+    image = image.getchannel("A")
+    image = image.convert("1", dither = Image.Dither.NONE)
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
