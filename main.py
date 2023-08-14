@@ -58,8 +58,10 @@ def calculate_transparency(image:Image, x:int, y:int , model:str, threshold:int,
     elif image.mode == "L":
         a = 255
         L = image.getpixel((x, y))
+    elif image.mode == "LA":
+        L, a = image.getpixel((x, y))
     else:
-        raise Exception("Provided image does not have supported mode.")
+        raise Exception(f"Provided image has mode {image.mode}, which is not supported.")
 
     # If original opacity is 0, leave it
     if (a == 0):
