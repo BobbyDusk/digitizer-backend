@@ -1,8 +1,3 @@
-# TODO: replace contour detection with opencv contour detection or pillow filter contour
-# to get the alpha channel: 
-# image = image.getchannel("A") -> returns L
-# to crush the alpha channel
-# image.convert("1", dither = Image.Dither.NONE)
 # TODO: automatically detect different objects by first making backkground black and then using opencv.contours()
 
 from PIL import Image
@@ -36,7 +31,10 @@ def convert_pillow_to_openCV(pillow_image:Image) -> np.array:
     elif pillow_image.mode == "RGBA":
         cv_image = np.array(pillow_image)
         return cv.cvtColor(cv_image, cv.COLOR_RGBA2BGRA)
-    elif pillow_image.mode in ["L", "1"]:
+    elif pillow_image.mode == "L":
+        return np.array(pillow_image)
+    elif pillow_image.mode == "1":
+        pillow_image = pillow_image.convert("L")
         return np.array(pillow_image)
     else:
         raise Exception("Image mode not supported.")
@@ -44,15 +42,33 @@ def convert_pillow_to_openCV(pillow_image:Image) -> np.array:
 def convert_openCV_to_pillow(cv_image:Image, mode) -> Image:
     if mode == "RGB":
         cv_image = cv.cvtColor(cv_image, cv.COLOR_BGR2RGB)
-        return Image.fromarray(cv_image)
+        return Image.fromarray(cv_image, mode)
     elif mode == "RGBA":
         cv_image = cv.cvtColor(cv_image, cv.COLOR_BGRA2RGBA)
-        return Image.fromarray(cv_image)
-    elif mode in ["L", "1"]:
-        return Image.fromarray(cv_image)
+        return Image.fromarray(cv_image, mode)
+    elif mode == "L":
+        return Image.fromarray(cv_image, mode)
+    elif mode == "1":
+        pillow_image = Image.fromarray(cv_image, "L")
+        return pillow_image.convert("1", dither = Image.Dither.NONE)
     else:
         raise Exception("Image mode not supported.")
 
+def get_contours_of_alpha(image):
+    image = image.getchannel("A")
+    image = image.convert("1", dither = Image.Dither.NONE)
+    cv_image = convert_pillow_to_openCV(image)
+    contours, hierarchy = cv.findContours(image=cv_image, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_NONE)
+    return contours
+
+def get_contours_mask_of_alpha(image:Image, thickness = 1):
+    # sadly, cv.drawContours cannot draw on grayscale imaga
+    contours = get_contours_of_alpha(image)
+    cv_mask_image = np.zeros((image.height, image.width, 3), dtype = "uint8")
+    cv_mask_image = cv.drawContours(image=cv_mask_image, contours=contours, contourIdx=-1, color=(255, 255, 255), thickness=thickness)
+    mask_image = convert_openCV_to_pillow(cv_mask_image, mode="RGB")
+    mask_image = mask_image.getchannel("R")
+    return mask_image
 
 def get_file_name_without_extension(file_path:str) -> str:
     base_name = os.path.basename(file_path)
@@ -138,36 +154,17 @@ def add_alpha_channel_based_on_lightness(image:Image, model:str = "pillow", thre
             result.putpixel((x, y), (pixel[0], pixel[1], pixel[2], a))
     return result
 
-def filter_white_in_edge(image:Image, border_width:int = 2, threshold:int = 150, max:int = 240) -> Image:
-    # TODO: improve computation with larger border_width
-    pixel_positions_to_change:list(tuple(int, int)) = []
+def filter_white_in_edge(image:Image, border_width:int = 3, threshold:int = 150, max:int = 240) -> Image:
+    contours_mask_image = get_contours_mask_of_alpha(image, thickness=border_width)
+    L_image = image.convert("LA")
     for y in range(image.height):
         for x in range(image.width):
-            pixel = image.getpixel((x, y))
-            if (pixel[3] > 10):
-                found = False
-                for y_offset in range(-1 * border_width, border_width + 1, 1):
-                    if (found):
-                        break
-                    for x_offset in range(-1 * border_width, border_width + 1, 1):
-                        comparisonY = y + y_offset
-                        comparisonX = x + x_offset
-                        if (comparisonY >= 0 and comparisonY < image.height and comparisonX >= 0 and comparisonX < image.width):
-                            comparison_pixel = image.getpixel((comparisonX, comparisonY))
-                            if (comparison_pixel[3] <= 10):
-                                pixel_positions_to_change.append((x, y))
-                                found = True
-                                break
-
-    L_image = image.convert("L")
-    for pos in pixel_positions_to_change:
-        pixel = image.getpixel((pos[0], pos[1]))
-        a = calculate_transparency(L_image, pos[0], pos[1], "pillow", threshold, max)
-        new_pixel = (pixel[0], pixel[1], pixel[2], a)
-        image.putpixel((pos[0], pos[1]), new_pixel)
-
+            if contours_mask_image.getpixel((x, y)) == 255:
+                pixel = image.getpixel((x, y))
+                a = calculate_transparency(L_image, x, y, "pillow", threshold, max)
+                new_pixel = (pixel[0], pixel[1], pixel[2], a)
+                image.putpixel((x, y), new_pixel)
     return image
-
 
 @app.route("/test", methods=["GET"])
 def test() -> str:
@@ -224,14 +221,13 @@ def process_image():
         image = add_alpha_channel_based_on_lightness(image, model=filterWhiteParams["model"], threshold=filterWhiteParams["threshold"], max=filterWhiteParams["max"])
 
     if (cropParams["enabled"] and cropParams["autoEnabled"] and image.mode == "RGBA"):
-        image = image.crop(image.getbbox(alpha_only=True))
+        bbox = image.getbbox(alpha_only=True)
+        border_width = 2
+        image = image.crop((bbox[0] - border_width, bbox[1] - border_width,  bbox[2] + border_width, bbox[3] + border_width))
         
     resizeParams = data["resize"]
     if (resizeParams["enabled"]):
         image.thumbnail((resizeParams["width"], resizeParams["height"]), resample=Image.Resampling.LANCZOS)
-
-    image = image.getchannel("A")
-    image = image.convert("1", dither = Image.Dither.NONE)
 
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
