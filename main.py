@@ -206,7 +206,8 @@ def process_image():
     # necessary in order to limit the required processing power
     MAX_SIZE = 2000
     if (image.height > MAX_SIZE or image.width > MAX_SIZE):
-        image.thumbnail([MAX_SIZE, MAX_SIZE])
+        # https://pillow.readthedocs.io/en/latest/handbook/concepts.html#filters
+        image.thumbnail([MAX_SIZE, MAX_SIZE], resample=Image.Resampling.LANCZOS)
 
     removeBackgroundParams = data["removeBackground"]
     if (removeBackgroundParams["enabled"]):
@@ -227,7 +228,7 @@ def process_image():
         
     resizeParams = data["resize"]
     if (resizeParams["enabled"]):
-        image.thumbnail((resizeParams["width"], resizeParams["height"]))
+        image.thumbnail((resizeParams["width"], resizeParams["height"]), resample=Image.Resampling.LANCZOS)
 
     image = image.getchannel("A")
     image = image.convert("1", dither = Image.Dither.NONE)
