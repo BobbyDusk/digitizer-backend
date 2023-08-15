@@ -1,5 +1,5 @@
 .vscode*
 __pycache__*
 Mambaforge-Linux-x86_64.sh
-test.png
-test.txt
+test*.png
+test*.txt

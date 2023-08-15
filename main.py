@@ -54,7 +54,31 @@ def convert_openCV_to_pillow(cv_image:Image, mode) -> Image:
     else:
         raise Exception("Image mode not supported.")
 
-def get_contours_of_alpha(image):
+def get_contours(image:Image, threshold:int = 200, min_area:float = 20):
+    image = image.convert("L")
+    cv_image = convert_pillow_to_openCV(image)
+    retval, threshold_image = cv.threshold(src=cv_image, thresh=threshold, maxval=255, type=cv.THRESH_BINARY_INV)
+    contours, hierarchy = cv.findContours(image=threshold_image, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_NONE)
+    contours = [contour for contour in contours if cv.contourArea(contour) > min_area]
+    return contours
+
+def slice_and_crop(image, threshold:int = 200, min_area:float = 20):
+    contours = get_contours(image, threshold, min_area)
+    images = []
+    cv_image = convert_pillow_to_openCV(image)
+    cv_image = cv.cvtColor(cv_image, cv.COLOR_BGR2BGRA)
+    for contour in contours:
+        cv_mask_image = np.zeros((image.height, image.width, 1), dtype = "uint8")
+        blank_image = np.zeros((image.height, image.width, 4), dtype = "uint8")
+        cv_mask_image = cv.drawContours(image=cv_mask_image, contours=[contour], contourIdx=-1, color=255, thickness=cv.FILLED)
+        masked_image = cv.bitwise_or(blank_image, cv_image, mask=cv_mask_image)
+        x, y, w, h = cv.boundingRect(contour)
+        cropped_image = masked_image[y:y+h, x:x+w]
+        result_image = convert_openCV_to_pillow(cropped_image, mode="RGBA")
+        images.append(result_image)
+    return images
+
+def get_contours_of_alpha(image:Image):
     image = image.getchannel("A")
     image = image.convert("1", dither = Image.Dither.NONE)
     cv_image = convert_pillow_to_openCV(image)
@@ -177,24 +201,16 @@ def check_required_keys_present(data:dict, required_keys:list[str]) -> bool:
             return False
     return True
 
-@app.route("/upload", methods=["POST"])
-def process_image():
-    if request.json:
-        data = request.json
+def automatically_process_image(image):
+    cropped_images = slice_and_crop(image)
+    images = []
+    for image in cropped_images:
+        image = filter_white_in_edge(image=image, border_width=4, threshold=100, max=195)
+        image_base64 = convert_image_to_base64(image)
+        images.append(image_base64)
+    return images
 
-    # TODO: also add recursive required key check
-    required_keys = [
-        "image", 
-        "filterWhite", 
-        "removeBackground", 
-    ]
-    if not check_required_keys_present(data, required_keys):
-        return jsonify({"message": f"One or more of the following info not included: {', '.join(required_keys)}"})
-
-    image_front, image_string = data["image"].split(",")
-    imageRaw = BytesIO(base64.b64decode(image_string))
-    image = Image.open(imageRaw, formats=["JPEG", "PNG"])
-
+def manually_process_image(image, data):
     cropParams = data["crop"]
     if (cropParams["enabled"]):
         cropBox = (cropParams["left"], cropParams["top"], cropParams["left"] + cropParams["width"], cropParams["top"] + cropParams["height"])
@@ -229,12 +245,51 @@ def process_image():
     if (resizeParams["enabled"]):
         image.thumbnail((resizeParams["width"], resizeParams["height"]), resample=Image.Resampling.LANCZOS)
 
+    image_base64 = convert_image_to_base64(image)
+    return image_base64
+
+def get_image_from_data(data) -> Image:
+    image_front, image_string = data["image"].split(",")
+    imageRaw = BytesIO(base64.b64decode(image_string))
+    image = Image.open(imageRaw, formats=["JPEG", "PNG"])
+    return image
+
+def convert_image_to_base64(image: Image) -> str:
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
     base64_image = base64.b64encode(image_bytes_io.getvalue()).decode('utf-8')
     base64_image = f"data:image/png;base64,{base64_image}"
-    message = f"image processed succesfully."
-    data = {"message": message, "image": base64_image}
+    return base64_image
+
+@app.route("/upload", methods=["POST"])
+def process_image():
+    if request.json:
+        data = request.json
+
+    # TODO: also add recursive required key check
+    required_keys = [
+        "image", 
+        "mode", 
+    ]
+    if not check_required_keys_present(data, required_keys):
+        return jsonify({"message": f"One or more of the following info not included: {', '.join(required_keys)}"})
+
+    image = get_image_from_data(data)
+
+    if (data["mode"] == "automatic"):
+        images = automatically_process_image(image)
+        message = f"image processed succesfully."
+        data = {"message": message, "images": images}
+
+    elif (data["mode"] == "manual"):
+        image = manually_process_image(image)
+        message = f"image processed succesfully."
+        data = {"message": message, "images": [image]}
+    
+    else:
+        message = f"Error: provided mode {data['mode']} not supported."
+        data = {"message": message}
+       
     return jsonify(data)
 
 if __name__ == "__main__":
