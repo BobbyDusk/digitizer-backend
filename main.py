@@ -1,5 +1,6 @@
 # TODO: add manual remove background mode by finding contour and  then only allowing th biggest contour (or every contour bigger than X)
 # TODO: for edge filter white, also account for the case where there is an internal contour by not only using external contours, but, for example, hierarchical contours
+# TODO: think of best way to handle white areas in character
 
 from PIL import Image
 import os
@@ -56,16 +57,19 @@ def convert_openCV_to_pillow(cv_image:Image, mode) -> Image:
     else:
         raise Exception("Image mode not supported.")
 
-def get_contours(image:Image, threshold:int = 200, min_area:float = 20):
+def get_contours(image:Image, threshold:int = 200, min_area_percentage:float = 0.001):
+    min_area = image.height * image.width * min_area_percentage / 100
+    print(min_area)
     image = image.convert("L")
     cv_image = convert_pillow_to_openCV(image)
     retval, threshold_image = cv.threshold(src=cv_image, thresh=threshold, maxval=255, type=cv.THRESH_BINARY_INV)
     contours, hierarchy = cv.findContours(image=threshold_image, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_NONE)
     contours = [contour for contour in contours if cv.contourArea(contour) > min_area]
+    contours = sorted(contours, key=lambda contour: cv.contourArea(contour), reverse=True)
     return contours
 
-def slice_and_crop(image, threshold:int = 200, min_area:float = 150):
-    contours = get_contours(image, threshold, min_area)
+def slice_and_crop(image, threshold:int = 200, min_area_percentage:float = 0.001):
+    contours = get_contours(image, threshold, min_area_percentage)
     images = []
     cv_image = convert_pillow_to_openCV(image)
     cv_image = cv.cvtColor(cv_image, cv.COLOR_BGR2BGRA)
