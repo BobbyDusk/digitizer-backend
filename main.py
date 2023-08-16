@@ -59,7 +59,6 @@ def convert_openCV_to_pillow(cv_image:Image, mode) -> Image:
 
 def get_contours(image:Image, threshold:int = 200, min_area_percentage:float = 0.001):
     min_area = image.height * image.width * min_area_percentage / 100
-    print(min_area)
     image = image.convert("L")
     cv_image = convert_pillow_to_openCV(image)
     retval, threshold_image = cv.threshold(src=cv_image, thresh=threshold, maxval=255, type=cv.THRESH_BINARY_INV)
