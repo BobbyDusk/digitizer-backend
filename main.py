@@ -1,4 +1,5 @@
-# TODO: automatically detect different objects by first making backkground black and then using opencv.contours()
+# TODO: add manual remove background mode by finding contour and  then only allowing th biggest contour (or every contour bigger than X)
+# TODO: for edge filter white, also account for the case where there is an internal contour by not only using external contours, but, for example, hierarchical contours
 
 from PIL import Image
 import os
@@ -63,7 +64,7 @@ def get_contours(image:Image, threshold:int = 200, min_area:float = 20):
     contours = [contour for contour in contours if cv.contourArea(contour) > min_area]
     return contours
 
-def slice_and_crop(image, threshold:int = 200, min_area:float = 20):
+def slice_and_crop(image, threshold:int = 200, min_area:float = 150):
     contours = get_contours(image, threshold, min_area)
     images = []
     cv_image = convert_pillow_to_openCV(image)
