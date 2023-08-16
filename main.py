@@ -5,7 +5,7 @@ import os
 import math
 from flask import Flask, request, jsonify, send_file, url_for
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from io import BytesIO
 import base64
@@ -14,6 +14,7 @@ import numpy as np
 import logging
 import numpy as np
 import cv2 as cv
+import zipfile
 
 app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": [r"localhost:(\d+)", r"(\w+)\.edgeofdusk\.com", "edgeofdusk.com"]}})
@@ -206,9 +207,13 @@ def automatically_process_image(image):
     images = []
     for image in cropped_images:
         image = filter_white_in_edge(image=image, border_width=4, threshold=100, max=195)
+        images.append(image)
+    base64_images = []
+    for image in images:
         image_base64 = convert_image_to_base64(image)
-        images.append(image_base64)
-    return images
+        base64_images.append(image_base64)
+    base64_zip = create_zip_base_64(images)
+    return base64_images, base64_zip
 
 def manually_process_image(image, data):
     cropParams = data["crop"]
@@ -246,7 +251,8 @@ def manually_process_image(image, data):
         image.thumbnail((resizeParams["width"], resizeParams["height"]), resample=Image.Resampling.LANCZOS)
 
     image_base64 = convert_image_to_base64(image)
-    return image_base64
+    base64_zip = create_zip_base_64([image])
+    return [image_base64], base64_zip
 
 def get_image_from_data(data) -> Image:
     image_front, image_string = data["image"].split(",")
@@ -254,12 +260,31 @@ def get_image_from_data(data) -> Image:
     image = Image.open(imageRaw, formats=["JPEG", "PNG"])
     return image
 
-def convert_image_to_base64(image: Image) -> str:
+def convert_image_to_memory_file(image: Image) -> BytesIO:
     image_bytes_io = BytesIO()
     image.save(image_bytes_io, format="PNG")
-    base64_image = base64.b64encode(image_bytes_io.getvalue()).decode('utf-8')
+    image_bytes_io.seek(0)
+    return image_bytes_io
+
+def convert_image_to_base64(image: Image) -> str:
+    mem_file = convert_image_to_memory_file(image)
+    base64_image = base64.b64encode(mem_file.getvalue()).decode('utf-8')
     base64_image = f"data:image/png;base64,{base64_image}"
     return base64_image
+
+def create_zip_base_64(images: [Image]) -> str:
+    memory_zip_file = BytesIO()
+    with zipfile.ZipFile(memory_zip_file, 'w') as zf:
+        index = 0
+        for image in images:
+            index += 1
+            filename = f"image_{index}.png"
+            mem_file = convert_image_to_memory_file(image)
+            zf.writestr(filename, mem_file.getvalue())
+    memory_zip_file.seek(0)
+    base64_zip = base64.b64encode(memory_zip_file.getvalue()).decode('utf-8')
+    base64_zip = f"data:application/zip;base64,{base64_zip}"
+    return base64_zip
 
 @app.route("/upload", methods=["POST"])
 def process_image():
@@ -277,14 +302,14 @@ def process_image():
     image = get_image_from_data(data)
 
     if (data["mode"] == "automatic"):
-        images = automatically_process_image(image)
+        images, zip = automatically_process_image(image)
         message = f"image processed succesfully."
-        data = {"message": message, "images": images}
+        data = {"message": message, "images": images, "zip": zip}
 
     elif (data["mode"] == "manual"):
-        image = manually_process_image(image)
+        images, zip = manually_process_image(image, data)
         message = f"image processed succesfully."
-        data = {"message": message, "images": [image]}
+        data = {"message": message, "images": images, "zip": zip}
     
     else:
         message = f"Error: provided mode {data['mode']} not supported."
