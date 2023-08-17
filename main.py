@@ -171,7 +171,6 @@ def add_alpha_channel_based_on_lightness(image:Image, model:str = "pillow", thre
     
     if (model == "pillow"):
         L_image = image.convert("LA")
-        L_image.save("test.png")
 
     for y in range(image.height):
         for x in range(image.width):
@@ -206,17 +205,18 @@ def check_required_keys_present(data:dict, required_keys:list[str]) -> bool:
             return False
     return True
 
-def automatically_process_image(image):
+def automatically_process_image(image, data):
     cropped_images = slice_and_crop(image)
+    format = data["format"] or "PNG"
     images = []
     for image in cropped_images:
         image = filter_white_in_edge(image=image, border_width=4, threshold=100, max=195)
         images.append(image)
     base64_images = []
     for image in images:
-        image_base64 = convert_image_to_base64(image)
+        image_base64 = convert_image_to_base64(image, format=format)
         base64_images.append(image_base64)
-    base64_zip = create_zip_base_64(images)
+    base64_zip = create_zip_base_64(images, format=format)
     return base64_images, base64_zip
 
 def manually_process_image(image, data):
@@ -254,8 +254,9 @@ def manually_process_image(image, data):
     if (resizeParams["enabled"]):
         image.thumbnail((resizeParams["width"], resizeParams["height"]), resample=Image.Resampling.LANCZOS)
 
-    image_base64 = convert_image_to_base64(image)
-    base64_zip = create_zip_base_64([image])
+    format = data["format"] or "PNG"
+    image_base64 = convert_image_to_base64(image, format=format)
+    base64_zip = create_zip_base_64([image], format=format)
     return [image_base64], base64_zip
 
 def get_image_from_data(data) -> Image:
@@ -264,26 +265,31 @@ def get_image_from_data(data) -> Image:
     image = Image.open(imageRaw, formats=["JPEG", "PNG"])
     return image
 
-def convert_image_to_memory_file(image: Image) -> BytesIO:
+def convert_image_to_memory_file(image: Image, format:str = "PNG") -> BytesIO:
     image_bytes_io = BytesIO()
-    image.save(image_bytes_io, format="PNG")
+    if (format == "PNG"):
+        image.save(image_bytes_io, format="PNG", optimize=True)
+    elif (format == "WEBP"):
+        image.save(image_bytes_io, format="WEBP", quality=75, method=5)
+    else:
+        raise Exception(f"Provided format not supported.")
     image_bytes_io.seek(0)
     return image_bytes_io
 
-def convert_image_to_base64(image: Image) -> str:
-    mem_file = convert_image_to_memory_file(image)
+def convert_image_to_base64(image: Image, format:str = "PNG") -> str:
+    mem_file = convert_image_to_memory_file(image, format = format)
     base64_image = base64.b64encode(mem_file.getvalue()).decode('utf-8')
-    base64_image = f"data:image/png;base64,{base64_image}"
+    base64_image = f"data:image/{format.lower()};base64,{base64_image}"
     return base64_image
 
-def create_zip_base_64(images: [Image]) -> str:
+def create_zip_base_64(images: [Image], format:str = "PNG") -> str:
     memory_zip_file = BytesIO()
     with zipfile.ZipFile(memory_zip_file, 'w') as zf:
         index = 0
         for image in images:
             index += 1
-            filename = f"image_{index}.png"
-            mem_file = convert_image_to_memory_file(image)
+            filename = f"image_{index}.{format.lower()}"
+            mem_file = convert_image_to_memory_file(image, format=format)
             zf.writestr(filename, mem_file.getvalue())
     memory_zip_file.seek(0)
     base64_zip = base64.b64encode(memory_zip_file.getvalue()).decode('utf-8')
@@ -306,7 +312,7 @@ def process_image():
     image = get_image_from_data(data)
 
     if (data["mode"] == "automatic"):
-        images, zip = automatically_process_image(image)
+        images, zip = automatically_process_image(image, data)
         message = f"image processed succesfully."
         data = {"message": message, "images": images, "zip": zip}
 
