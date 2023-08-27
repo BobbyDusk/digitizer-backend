@@ -3,6 +3,7 @@
 # TODO: think of best way to handle white areas in character
 
 from PIL import Image
+import PIL.ImageOps
 import os
 import math
 from flask import Flask, request, jsonify, send_file, url_for
@@ -26,6 +27,23 @@ if __name__ != '__main__':
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
+     
+def invert(image:Image) -> Image:
+    if image.mode == 'RGBA':
+        r,g,b,a = image.split()
+        rgb_image = Image.merge('RGB', (r,g,b))
+        inverted_image = PIL.ImageOps.invert(rgb_image)
+        r2,g2,b2 = inverted_image.split()
+        final_transparent_image = Image.merge('RGBA', (r2,g2,b2,a))
+        return final_transparent_image
+
+    else:
+        inverted_image = PIL.ImageOps.invert(image)
+        return inverted_image
+
+def invert_multiple(images:[Image]) -> [Image]:
+    inverted_images = [invert(image) for image in images]
+    return inverted_images
 
 def convert_pillow_to_openCV(pillow_image:Image) -> np.array:
     if pillow_image.mode == "RGB":
@@ -212,12 +230,7 @@ def automatically_process_image(image, data):
     for image in cropped_images:
         image = filter_white_in_edge(image=image, border_width=4, threshold=100, max=195)
         images.append(image)
-    base64_images = []
-    for image in images:
-        image_base64 = convert_image_to_base64(image, format=format)
-        base64_images.append(image_base64)
-    base64_zip = create_zip_base_64(images, format=format)
-    return base64_images, base64_zip
+    return images
 
 def manually_process_image(image, data):
     cropParams = data["crop"]
@@ -254,15 +267,13 @@ def manually_process_image(image, data):
     if (resizeParams["enabled"]):
         image.thumbnail((resizeParams["width"], resizeParams["height"]), resample=Image.Resampling.LANCZOS)
 
-    format = data["format"] or "PNG"
-    image_base64 = convert_image_to_base64(image, format=format)
-    base64_zip = create_zip_base_64([image], format=format)
-    return [image_base64], base64_zip
+    return [image]
 
 def get_image_from_data(data) -> Image:
     image_front, image_string = data["image"].split(",")
     imageRaw = BytesIO(base64.b64decode(image_string))
-    image = Image.open(imageRaw, formats=["JPEG", "PNG"])
+    image = Image.open(imageRaw, formats=["JPEG", "PNG", "WEBP"])
+
     return image
 
 def convert_image_to_memory_file(image: Image, format:str = "PNG") -> BytesIO:
@@ -281,6 +292,10 @@ def convert_image_to_base64(image: Image, format:str = "PNG") -> str:
     base64_image = base64.b64encode(mem_file.getvalue()).decode('utf-8')
     base64_image = f"data:image/{format.lower()};base64,{base64_image}"
     return base64_image
+
+def convert_multiple_images_to_base64(images: [Image], format: str = "PNG") -> [str]:
+    base64_images = [convert_image_to_base64(image, format) for image in images]
+    return base64_images
 
 def create_zip_base_64(images: [Image], format:str = "PNG") -> str:
     memory_zip_file = BytesIO()
@@ -311,20 +326,28 @@ def process_image():
 
     image = get_image_from_data(data)
 
-    if (data["mode"] == "automatic"):
-        images, zip = automatically_process_image(image, data)
-        message = f"image processed succesfully."
-        data = {"message": message, "images": images, "zip": zip}
+    # if backgroundColor is black, then we invert when reading the image and invert back the final image
+    if (data["backgroundColor"] == "black"):
+        image = invert(image)
 
+    if (data["mode"] == "automatic"):
+        images = automatically_process_image(image, data)
     elif (data["mode"] == "manual"):
-        images, zip = manually_process_image(image, data)
-        message = f"image processed succesfully."
-        data = {"message": message, "images": images, "zip": zip}
-    
+        images = manually_process_image(image, data)
     else:
         message = f"Error: provided mode {data['mode']} not supported."
-        data = {"message": message}
-       
+        return jsonify({"message": message})
+
+    if (data["backgroundColor"] == "black"):
+        images = invert_multiple(images)
+
+    format = data["format"] or "PNG"
+    base64_images = convert_multiple_images_to_base64(images, format)
+    base64_zip = create_zip_base_64(images, format=format)
+
+    
+    message = f"image processed succesfully."
+    data = {"message": message, "images": base64_images, "zip": base64_zip}
     return jsonify(data)
 
 if __name__ == "__main__":
