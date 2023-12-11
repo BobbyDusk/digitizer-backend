@@ -4,7 +4,5 @@ gunicorn ~= 21.2
 pillow ~= 10.0
 opencv-python ~= 4.8.0
 numpy ~= 1.24
-
-# Cannot be installed through conda
 rembg ~= 2.0
 

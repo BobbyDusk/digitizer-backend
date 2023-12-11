@@ -297,6 +297,22 @@ def convert_multiple_images_to_base64(images: [Image], format: str = "PNG") -> [
     base64_images = [convert_image_to_base64(image, format) for image in images]
     return base64_images
 
+def convert_contour_to_svg(contour, width, height):
+    f = open('path.svg', 'w+')
+    f.write('<svg width="'+str(width)+'" height="'+str(height)+'" xmlns="http://www.w3.org/2000/svg">')
+    f.write('<path d="M')
+
+    for point in contour:
+        x, y = point
+        f.write(str(x)+  ' ' + str(y)+' ')
+
+    f.write('"/>')
+    f.write('</svg>')
+    f.close()
+
+def convert_image_to_svg(image):
+    pass
+
 def create_zip_base_64(images: [Image], format:str = "PNG") -> str:
     memory_zip_file = BytesIO()
     with zipfile.ZipFile(memory_zip_file, 'w') as zf:
