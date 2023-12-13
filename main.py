@@ -276,13 +276,23 @@ def get_image_from_data(data) -> Image:
 
     return image
 
-def convert_image_to_memory_file(image: Image, format:str = "PNG") -> BytesIO:
+def convert_image_to_memory_file(image: Image, format:str = "PNG", formatOptions = None) -> BytesIO:
     if (format == "PNG"):
         mem_file = BytesIO()
         image.save(mem_file, format="PNG", optimize=True)
     elif (format == "WEBP"):
         mem_file = BytesIO()
-        image.save(mem_file, format="WEBP", quality=75, method=5)
+        lossless = False
+        quality = 75
+        method = 5
+        if formatOptions:
+            if "lossless" in formatOptions:
+                lossless = formatOptions["lossless"]
+            if "quality" in formatOptions:
+                quality = formatOptions["quality"]
+            if "method" in formatOptions:
+                method = formatOptions["method"]
+        image.save(mem_file, format="WEBP", quality=quality, method=method, lossless=lossless)
     elif (format == "SVG"):
         mem_file = StringIO(image)
     else:
@@ -316,9 +326,12 @@ def convert_contour_to_svg(contour):
     svg_string += '</svg>'
     return svg_string
 
-def convert_cut_out_image_to_svg(cut_out_image):
+def convert_cut_out_image_to_svg(cut_out_image, simplify_contour = False, approximation_length_percentage = 0.1):
     contours = get_contours_of_alpha(cut_out_image)
     contour = max(contours, key=cv.contourArea) #max contour
+    if simplify_contour:
+        approximation_length = approximation_length_percentage / 100 * cv.arcLength(contour,True)
+        contour = cv.approxPolyDP(contour,approximation_length,True)
     svg = convert_contour_to_svg(contour)
     return svg
 
@@ -368,7 +381,14 @@ def process_image():
 
     format = data["format"] or "PNG"
     if format == "SVG":
-        images = [convert_cut_out_image_to_svg(image) for image in images]
+        simplify_contour = True
+        approximation_length_percentage = 0.1
+        if data["formatOptions"]:
+                if "simplifyContour" in data["formatOptions"]:
+                    simplify_contour = data["formatOptions"]["simplifyContour"]
+                if "approximationLengthPercentage" in data["formatOptions"]:
+                    approximation_length_percentage = data["formatOptions"]["approximationLengthPercentage"]
+        images = [convert_cut_out_image_to_svg(image, simplify_contour=simplify_contour, approximation_length_percentage=approximation_length_percentage) for image in images]
 
     images_URI = convert_multiple_images_to_URI(images, format)
     zip_URI = create_zip_URI(images, format=format)
