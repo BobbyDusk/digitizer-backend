@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify, send_file, url_for
 from flask_cors import CORS
 from datetime import datetime, time
 from pathlib import Path
-from io import BytesIO
+from io import BytesIO, StringIO
 import base64
 from rembg import new_session, remove
 import numpy as np
@@ -277,43 +277,52 @@ def get_image_from_data(data) -> Image:
     return image
 
 def convert_image_to_memory_file(image: Image, format:str = "PNG") -> BytesIO:
-    image_bytes_io = BytesIO()
     if (format == "PNG"):
-        image.save(image_bytes_io, format="PNG", optimize=True)
+        mem_file = BytesIO()
+        image.save(mem_file, format="PNG", optimize=True)
     elif (format == "WEBP"):
-        image.save(image_bytes_io, format="WEBP", quality=75, method=5)
+        mem_file = BytesIO()
+        image.save(mem_file, format="WEBP", quality=75, method=5)
+    elif (format == "SVG"):
+        mem_file = StringIO(image)
     else:
         raise Exception(f"Provided format not supported.")
-    image_bytes_io.seek(0)
-    return image_bytes_io
+    mem_file.seek(0)
+    return mem_file
 
-def convert_image_to_base64(image: Image, format:str = "PNG") -> str:
-    mem_file = convert_image_to_memory_file(image, format = format)
-    base64_image = base64.b64encode(mem_file.getvalue()).decode('utf-8')
-    base64_image = f"data:image/{format.lower()};base64,{base64_image}"
-    return base64_image
+def convert_image_to_URI(image: Image, format:str = "PNG") -> str:
+    if format == "SVG":
+        URI_image = f"data:image/svg+xml;utf8,{image}"
+    else:
+        mem_file = convert_image_to_memory_file(image, format = format)
+        base64_image = base64.b64encode(mem_file.getvalue()).decode('utf-8')
+        URI_image = f"data:image/{format.lower()};base64,{base64_image}"
+    return URI_image
 
-def convert_multiple_images_to_base64(images: [Image], format: str = "PNG") -> [str]:
-    base64_images = [convert_image_to_base64(image, format) for image in images]
-    return base64_images
+def convert_multiple_images_to_URI(images: [Image], format: str = "PNG") -> [str]:
+    URI_images = [convert_image_to_URI(image, format) for image in images]
+    return URI_images
 
-def convert_contour_to_svg(contour, width, height):
-    f = open('path.svg', 'w+')
-    f.write('<svg width="'+str(width)+'" height="'+str(height)+'" xmlns="http://www.w3.org/2000/svg">')
-    f.write('<path d="M')
+def convert_contour_to_svg(contour):
+    x, y, width, height = cv.boundingRect(contour)
+    svg_string = '<svg width="'+str(width)+'" height="'+str(height)+'" xmlns="http://www.w3.org/2000/svg">'
+    svg_string += '<path d="M'
 
     for point in contour:
-        x, y = point
-        f.write(str(x)+  ' ' + str(y)+' ')
+        x, y = point[0]
+        svg_string += str(x)+  ' ' + str(y)+' '
 
-    f.write('"/>')
-    f.write('</svg>')
-    f.close()
+    svg_string += '"/>'
+    svg_string += '</svg>'
+    return svg_string
 
-def convert_image_to_svg(image):
-    pass
+def convert_cut_out_image_to_svg(cut_out_image):
+    contours = get_contours_of_alpha(cut_out_image)
+    contour = max(contours, key=cv.contourArea) #max contour
+    svg = convert_contour_to_svg(contour)
+    return svg
 
-def create_zip_base_64(images: [Image], format:str = "PNG") -> str:
+def create_zip_URI(images: [Image], format:str = "PNG") -> str:
     memory_zip_file = BytesIO()
     with zipfile.ZipFile(memory_zip_file, 'w') as zf:
         index = 0
@@ -324,8 +333,8 @@ def create_zip_base_64(images: [Image], format:str = "PNG") -> str:
             zf.writestr(filename, mem_file.getvalue())
     memory_zip_file.seek(0)
     base64_zip = base64.b64encode(memory_zip_file.getvalue()).decode('utf-8')
-    base64_zip = f"data:application/zip;base64,{base64_zip}"
-    return base64_zip
+    URI_zip = f"data:application/zip;base64,{base64_zip}"
+    return URI_zip
 
 @app.route("/upload", methods=["POST"])
 def process_image():
@@ -358,12 +367,14 @@ def process_image():
         images = invert_multiple(images)
 
     format = data["format"] or "PNG"
-    base64_images = convert_multiple_images_to_base64(images, format)
-    base64_zip = create_zip_base_64(images, format=format)
+    if format == "SVG":
+        images = [convert_cut_out_image_to_svg(image) for image in images]
 
-    
+    images_URI = convert_multiple_images_to_URI(images, format)
+    zip_URI = create_zip_URI(images, format=format)
+
     message = f"image processed succesfully."
-    data = {"message": message, "images": base64_images, "zip": base64_zip}
+    data = {"message": message, "images": images_URI, "zip": zip_URI}
     return jsonify(data)
 
 if __name__ == "__main__":
