@@ -300,17 +300,17 @@ def convert_image_to_memory_file(image: Image, format:str = "PNG", formatOptions
     mem_file.seek(0)
     return mem_file
 
-def convert_image_to_URI(image: Image, format:str = "PNG") -> str:
+def convert_image_to_URI(image: Image, format:str = "PNG", formatOptions = None) -> str:
     if format == "SVG":
         URI_image = f"data:image/svg+xml;utf8,{image}"
     else:
-        mem_file = convert_image_to_memory_file(image, format = format)
+        mem_file = convert_image_to_memory_file(image, format = format, formatOptions=formatOptions)
         base64_image = base64.b64encode(mem_file.getvalue()).decode('utf-8')
         URI_image = f"data:image/{format.lower()};base64,{base64_image}"
     return URI_image
 
-def convert_multiple_images_to_URI(images: [Image], format: str = "PNG") -> [str]:
-    URI_images = [convert_image_to_URI(image, format) for image in images]
+def convert_multiple_images_to_URI(images: [Image], format: str = "PNG", formatOptions = None) -> [str]:
+    URI_images = [convert_image_to_URI(image, format, formatOptions=formatOptions) for image in images]
     return URI_images
 
 def convert_contour_to_svg(contour):
@@ -335,14 +335,14 @@ def convert_cut_out_image_to_svg(cut_out_image, simplify_contour = False, approx
     svg = convert_contour_to_svg(contour)
     return svg
 
-def create_zip_URI(images: [Image], format:str = "PNG") -> str:
+def create_zip_URI(images: [Image], format:str = "PNG", formatOptions = None) -> str:
     memory_zip_file = BytesIO()
     with zipfile.ZipFile(memory_zip_file, 'w') as zf:
         index = 0
         for image in images:
             index += 1
             filename = f"image_{index}.{format.lower()}"
-            mem_file = convert_image_to_memory_file(image, format=format)
+            mem_file = convert_image_to_memory_file(image, format=format, formatOptions=formatOptions)
             zf.writestr(filename, mem_file.getvalue())
     memory_zip_file.seek(0)
     base64_zip = base64.b64encode(memory_zip_file.getvalue()).decode('utf-8')
@@ -384,14 +384,14 @@ def process_image():
         simplify_contour = True
         approximation_length_percentage = 0.1
         if data["formatOptions"]:
-                if "simplifyContour" in data["formatOptions"]:
-                    simplify_contour = data["formatOptions"]["simplifyContour"]
+                if "simplify" in data["formatOptions"]:
+                    simplify_contour = data["formatOptions"]["simplify"]
                 if "approximationLengthPercentage" in data["formatOptions"]:
                     approximation_length_percentage = data["formatOptions"]["approximationLengthPercentage"]
         images = [convert_cut_out_image_to_svg(image, simplify_contour=simplify_contour, approximation_length_percentage=approximation_length_percentage) for image in images]
 
-    images_URI = convert_multiple_images_to_URI(images, format)
-    zip_URI = create_zip_URI(images, format=format)
+    images_URI = convert_multiple_images_to_URI(images, format, formatOptions=data["formatOptions"])
+    zip_URI = create_zip_URI(images, format=format, formatOptions=data["formatOptions"])
 
     message = f"image processed succesfully."
     data = {"message": message, "images": images_URI, "zip": zip_URI}
