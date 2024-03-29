@@ -212,9 +212,9 @@ def filter_white_in_edge(image:Image, border_width:int = 3, threshold:int = 150,
                 image.putpixel((x, y), new_pixel)
     return image
 
-@app.route("/test", methods=["GET"])
+@app.route("/ping", methods=["GET"])
 def test() -> str:
-    return "test"
+    return "pong from digitizer"
 
 
 def check_required_keys_present(data:dict, required_keys:list[str]) -> bool:
