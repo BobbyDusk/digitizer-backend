@@ -6,7 +6,7 @@ from PIL import Image
 import PIL.ImageOps
 import os
 import math
-from flask import Flask, request, jsonify, send_file, url_for
+from flask import Response, Flask, request, jsonify, send_file, url_for
 from flask_cors import CORS
 from datetime import datetime, time
 from pathlib import Path
@@ -27,7 +27,12 @@ if __name__ != '__main__':
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
-     
+
+@app.before_request
+def basic_authentication():
+    if request.method.lower() == 'options':
+        return Response()
+
 def invert(image:Image) -> Image:
     if image.mode == 'RGBA':
         r,g,b,a = image.split()
@@ -182,11 +187,11 @@ def calculate_average(r:int, g:int, b:int) -> int:
     return int((r + g + b) / 3)
 
 def calculate_lightness(r:int, g:int, b:int) -> int:
-    return int((max(r, g, b) + min(r, g, b)) / 2) 
+    return int((max(r, g, b) + min(r, g, b)) / 2)
 
 def add_alpha_channel_based_on_lightness(image:Image, model:str = "pillow", threshold:int = 230, max:int = 255) -> Image:
     result = Image.new('RGBA', (image.width, image.height))
-    
+
     if (model == "pillow"):
         L_image = image.convert("LA")
 
@@ -237,7 +242,7 @@ def manually_process_image(image, data):
     if (cropParams["enabled"]):
         cropBox = (cropParams["left"], cropParams["top"], cropParams["left"] + cropParams["width"], cropParams["top"] + cropParams["height"])
         image = image.crop(cropBox)
-   
+
     # necessary in order to limit the required processing power
     MAX_SIZE = 2000
     if (image.height > MAX_SIZE or image.width > MAX_SIZE):
@@ -262,7 +267,7 @@ def manually_process_image(image, data):
         bbox = image.getbbox(alpha_only=True)
         border_width = 2
         image = image.crop((bbox[0] - border_width, bbox[1] - border_width,  bbox[2] + border_width, bbox[3] + border_width))
-        
+
     resizeParams = data["resize"]
     if (resizeParams["enabled"]):
         image.thumbnail((resizeParams["width"], resizeParams["height"]), resample=Image.Resampling.LANCZOS)
@@ -356,8 +361,8 @@ def process_image():
 
     # TODO: also add recursive required key check
     required_keys = [
-        "image", 
-        "mode", 
+        "image",
+        "mode",
     ]
     if not check_required_keys_present(data, required_keys):
         return jsonify({"message": f"One or more of the following info not included: {', '.join(required_keys)}"})
