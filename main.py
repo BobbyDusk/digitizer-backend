@@ -219,7 +219,7 @@ def filter_white_in_edge(image:Image, border_width:int = 3, threshold:int = 150,
 
 @app.route("/ping", methods=["GET"])
 def test() -> str:
-    return "pong from digitizer"
+    return "pong from digitizer v0.1.0"
 
 
 def check_required_keys_present(data:dict, required_keys:list[str]) -> bool:
