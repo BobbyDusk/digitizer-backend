@@ -1,3 +1,6 @@
+# Copyright (c) 2025, Edge of Dusk
+# This project is licensed under the MIT License - see the LICENSE file for details.
+
 # TODO: add manual remove background mode by finding contour and  then only allowing th biggest contour (or every contour bigger than X)
 # TODO: for edge filter white, also account for the case where there is an internal contour by not only using external contours, but, for example, hierarchical contours
 # TODO: think of best way to handle white areas in character
